@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api import sales
+from app.api.routes import vendas
 
 app = FastAPI()
-app.include_router(sales.router, prefix="/vendas", tags=["vendas"])
+app.include_router(vendas.router, prefix="/vendas", tags=["vendas"])
