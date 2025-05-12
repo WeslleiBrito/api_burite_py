@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, Date, String
+from sqlalchemy import Column, Integer, Float, Date
 from app.db.base import Base
 
 class VendaItem(Base):
