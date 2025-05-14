@@ -1,9 +1,10 @@
-from typing import Dict
-
-from app.business.tools.calcular_faturamento_mes_corrente import calcular_faturamento_mes_corrente
-from app.business.tools.calculo_faturamento_ultimos_12_meses import faturamento
-from app.db.session import SessionLocal
+from datetime import date
+from typing import Optional
 from pydantic import BaseModel
+from app.business.tools.calcular_faturamento_mes_corrente import calcular_faturamento_mes_corrente
+from app.business.tools.calculo_faturamento_ultimos_12_meses import faturamento as faturamento_12_meses
+from app.db.session import SessionLocal
+
 
 class SimplesNacionalGuia(BaseModel):
     faturamento_12_meses: float
@@ -19,8 +20,6 @@ class SimplesNacionalGuia(BaseModel):
     total_guia: float
 
 
-
-# Tabela de percentuais de repartição da alíquota efetiva para o Anexo I (Simples Nacional)
 faixas_anexo_1 = [
     {
         "limite_superior": 180000.00,
@@ -102,66 +101,70 @@ faixas_anexo_1 = [
     },
 ]
 
-def calcular_guia_simples_nacional_anexo_1(
-    faturamento_12_meses: float,
-    faturamento_mes_substituido: float,
-    faturamento_mes_nao_substituido: float,
-) -> SimplesNacionalGuia:
-    """Calcula os tributos do Simples Nacional Anexo I para o mês corrente."""
 
-    total_faturamento_mes = faturamento_mes_substituido + faturamento_mes_nao_substituido
+class GuiaSimplesNacionalAnexo1:
+    def __init__(self, data_base: Optional[date] = None):
+        self.data_base = data_base or date.today()
 
-    faixa = next(
-        (f for f in faixas_anexo_1 if faturamento_12_meses <= f["limite_superior"]),
-        faixas_anexo_1[-1],
-    )
+        self.faturamento_12_meses: float = 0.0
+        self.faturamento_mes_substituido: float = 0.0
+        self.faturamento_mes_nao_substituido: float = 0.0
 
-    aliquota_efetiva = (
-        (faturamento_12_meses * faixa["aliquota_nominal"]) - faixa["desconto"]
-    ) / faturamento_12_meses
+        db = SessionLocal()
+        try:
+            resumo_12_meses = faturamento_12_meses(data_b=self.data_base)
+            resumo_mes = calcular_faturamento_mes_corrente(db=db, data_base=self.data_base)
 
-    resultado = {}
-    for imposto, percentual in faixa["partilhas"].items():
-        base = (
-            faturamento_mes_nao_substituido
-            if imposto == "ICMS"
-            else total_faturamento_mes
-        )
-        resultado[imposto] = round(base * aliquota_efetiva * percentual, 2)
+            self.faturamento_12_meses = resumo_12_meses.substituido + resumo_12_meses.nao_substituido
+            self.faturamento_mes_substituido = resumo_mes.substituido
+            self.faturamento_mes_nao_substituido = resumo_mes.nao_substituido
+        finally:
+            db.close()
 
-    resultado["total_guia"] = round(sum(resultado.values()), 2)
-    resultado["aliquota_efetiva"] = round(aliquota_efetiva * 100, 4)
+    def calcular(self) -> SimplesNacionalGuia:
+        total_mes = self.faturamento_mes_substituido + self.faturamento_mes_nao_substituido
 
-    return SimplesNacionalGuia(
-        faturamento_12_meses=faturamento_12_meses,
-        faturamento_mes_substituido=faturamento_mes_substituido,
-        faturamento_mes_nao_substituido=faturamento_mes_nao_substituido,
-        aliquota_efetiva=resultado["aliquota_efetiva"],
-        irpj=resultado["IRPJ"],
-        csll=resultado["CSLL"],
-        cofins=resultado["Cofins"],
-        pis=resultado["Pis"],
-        cpp=resultado["CPP"],
-        icms=resultado["ICMS"],
-        total_guia=resultado["total_guia"]
-    )
-
-
-def guia() -> SimplesNacionalGuia:
-    db_local = SessionLocal()
-    try:
-        faturamento_12_meses = faturamento()
-        faturamento_mes_corrente = calcular_faturamento_mes_corrente(db=db_local)
-
-        guia = calcular_guia_simples_nacional_anexo_1(
-            faturamento_12_meses=faturamento_12_meses.nao_substituido + faturamento_12_meses.substituido,
-            faturamento_mes_substituido=faturamento_mes_corrente["substituido"],
-            faturamento_mes_nao_substituido=faturamento_mes_corrente["nao_substituido"]
+        faixa = next(
+            (f for f in faixas_anexo_1 if self.faturamento_12_meses <= f["limite_superior"]),
+            faixas_anexo_1[-1],
         )
 
-        return guia
-    finally:
-        db_local.close()
+        aliquota_efetiva = (
+            (self.faturamento_12_meses * faixa["aliquota_nominal"]) - faixa["desconto"]
+        ) / self.faturamento_12_meses
+
+        resultado = {}
+        for imposto, percentual in faixa["partilhas"].items():
+            base = (
+                self.faturamento_mes_nao_substituido
+                if imposto == "ICMS"
+                else total_mes
+            )
+            resultado[imposto] = round(base * aliquota_efetiva * percentual, 2)
+
+        resultado["total_guia"] = round(sum(resultado.values()), 2)
+        resultado["aliquota_efetiva"] = round(aliquota_efetiva * 100, 4)
+
+        return SimplesNacionalGuia(
+            faturamento_12_meses=self.faturamento_12_meses,
+            faturamento_mes_substituido=self.faturamento_mes_substituido,
+            faturamento_mes_nao_substituido=self.faturamento_mes_nao_substituido,
+            aliquota_efetiva=resultado["aliquota_efetiva"],
+            irpj=resultado["IRPJ"],
+            csll=resultado["CSLL"],
+            cofins=resultado["Cofins"],
+            pis=resultado["Pis"],
+            cpp=resultado["CPP"],
+            icms=resultado["ICMS"],
+            total_guia=resultado["total_guia"],
+        )
+
+    def to_dict(self) -> dict:
+        return self.calcular().model_dump()
+
 
 if __name__ == "__main__":
-    print(guia())
+    from datetime import date
+
+    guia = GuiaSimplesNacionalAnexo1(date(2024, 3, 12))
+    print(guia.to_dict())
