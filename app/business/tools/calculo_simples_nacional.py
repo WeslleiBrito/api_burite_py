@@ -1,9 +1,13 @@
 from datetime import date
 from typing import Optional
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from sqlalchemy import extract, func
+
 from app.business.tools.calcular_faturamento_mes_corrente import calcular_faturamento_mes_corrente
 from app.business.tools.calculo_faturamento_ultimos_12_meses import faturamento as faturamento_12_meses
 from app.db.session import SessionLocal
+from app.models.pagar_rateio import PagarRateio
 
 
 class SimplesNacionalGuia(BaseModel):
@@ -105,10 +109,9 @@ faixas_anexo_1 = [
 class GuiaSimplesNacionalAnexo1:
     def __init__(self, data_base: Optional[date] = None):
         self.data_base = data_base or date.today()
-
-        self.faturamento_12_meses: float = 0.0
-        self.faturamento_mes_substituido: float = 0.0
-        self.faturamento_mes_nao_substituido: float = 0.0
+        self.faturamento_12_meses = 0.0
+        self.faturamento_mes_substituido = 0.0
+        self.faturamento_mes_nao_substituido = 0.0
 
         db = SessionLocal()
         try:
@@ -118,8 +121,25 @@ class GuiaSimplesNacionalAnexo1:
             self.faturamento_12_meses = resumo_12_meses.substituido + resumo_12_meses.nao_substituido
             self.faturamento_mes_substituido = resumo_mes.substituido
             self.faturamento_mes_nao_substituido = resumo_mes.nao_substituido
+
+            self.valor_real_guia = self._consultar_guia_real(db=db)
         finally:
             db.close()
+
+    def _consultar_guia_real(self, db: Session) -> Optional[float]:
+        ano = self.data_base.year
+        mes = self.data_base.month
+
+        resultado = (
+            db.query(func.sum(PagarRateio.valor_rateio))
+            .filter(
+                PagarRateio.tipo_conta == 88,
+                extract("year", PagarRateio.data_vencimento) == ano,
+                extract("month", PagarRateio.data_vencimento) == mes,
+            )
+            .scalar()
+        )
+        return resultado if resultado else None
 
     def calcular(self) -> SimplesNacionalGuia:
         total_mes = self.faturamento_mes_substituido + self.faturamento_mes_nao_substituido
@@ -133,17 +153,28 @@ class GuiaSimplesNacionalAnexo1:
             (self.faturamento_12_meses * faixa["aliquota_nominal"]) - faixa["desconto"]
         ) / self.faturamento_12_meses
 
-        resultado = {}
-        for imposto, percentual in faixa["partilhas"].items():
-            base = (
-                self.faturamento_mes_nao_substituido
-                if imposto == "ICMS"
-                else total_mes
+        # Usa valor real da contabilidade se existir
+        if self.valor_real_guia:
+            resultado = {
+                imposto: round(self.valor_real_guia * percentual, 2)
+                for imposto, percentual in faixa["partilhas"].items()
+            }
+            resultado["total_guia"] = round(self.valor_real_guia, 2)
+            resultado["aliquota_efetiva"] = round(
+                self.valor_real_guia / total_mes * 100 if total_mes else 0, 4
             )
-            resultado[imposto] = round(base * aliquota_efetiva * percentual, 2)
+        else:
+            resultado = {}
+            for imposto, percentual in faixa["partilhas"].items():
+                base = (
+                    self.faturamento_mes_nao_substituido
+                    if imposto == "ICMS"
+                    else total_mes
+                )
+                resultado[imposto] = round(base * aliquota_efetiva * percentual, 2)
 
-        resultado["total_guia"] = round(sum(resultado.values()), 2)
-        resultado["aliquota_efetiva"] = round(aliquota_efetiva * 100, 4)
+            resultado["total_guia"] = round(sum(resultado.values()), 2)
+            resultado["aliquota_efetiva"] = round(aliquota_efetiva * 100, 4)
 
         return SimplesNacionalGuia(
             faturamento_12_meses=self.faturamento_12_meses,
@@ -159,12 +190,7 @@ class GuiaSimplesNacionalAnexo1:
             total_guia=resultado["total_guia"],
         )
 
-    def to_dict(self) -> dict:
-        return self.calcular().model_dump()
-
 
 if __name__ == "__main__":
-    from datetime import date
-
-    guia = GuiaSimplesNacionalAnexo1(date(2024, 3, 12))
-    print(guia.to_dict())
+    guia = GuiaSimplesNacionalAnexo1().calcular()
+    print(guia.model_dump())
