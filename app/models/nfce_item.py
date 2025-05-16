@@ -11,3 +11,4 @@ class NfceItem(Base):
     qtdcancelamento = Column(Float)
     vProd = Column(Float)
     vDesc = Column(Float)
+    cancelado = Column(Integer)

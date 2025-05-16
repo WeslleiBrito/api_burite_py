@@ -1,11 +1,15 @@
-from sqlalchemy import Column, Integer, Float, Date
+from sqlalchemy import Column, Integer, Float, Date, ForeignKey
 from app.db.base import Base
+from sqlalchemy.orm import relationship
 
 
 class PagarRateio(Base):
     __tablename__ = "pagar_rateio"
 
-    rateio_cod = Column("rateio_cod", Integer, primary_key=True, index=True)
-    tipo_conta = Column("rateio_tipoconta", Integer, index=True)
-    valor_rateio = Column("rateio_vlrrateio", Float)
-    data_vencimento = Column("rateio_dtvencimento", Date)
+    rateio_cod = Column(Integer, primary_key=True, index=True)
+    rateio_tipoconta = Column(Integer, ForeignKey("tipoconta.tipocont_cod"), index=True)
+    rateio_vlrrateio = Column(Float)
+    rateio_dtvencimento = Column(Date)
+
+    tipo_conta_rel = relationship("TipoConta", back_populates="pagar_rateios")
+

@@ -12,6 +12,7 @@ class NfeItem(Base):
     qtdcancelamento = Column(Float)
     vProd = Column(Float)
     vDesc = Column(Float)
+    cancelado = Column(Integer)
 
     # Adicione o relationship
     nfe = relationship("Nfe", back_populates="itens")

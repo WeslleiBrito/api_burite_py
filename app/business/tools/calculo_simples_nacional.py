@@ -3,7 +3,6 @@ from typing import Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import extract, func
-
 from app.business.tools.calcular_faturamento_mes_corrente import calcular_faturamento_mes_corrente
 from app.business.tools.calculo_faturamento_ultimos_12_meses import faturamento as faturamento_12_meses
 from app.db.session import SessionLocal
@@ -26,82 +25,124 @@ class SimplesNacionalGuia(BaseModel):
 
 faixas_anexo_1 = [
     {
-        "limite_superior": 180000.00,
+        "limite_superior": 180000.0,
         "aliquota_nominal": 0.04,
         "desconto": 0.0,
-        "partilhas": {
-            "IRPJ": 0.055,
-            "CSLL": 0.035,
-            "Cofins": 0.1274,
-            "Pis": 0.0276,
-            "CPP": 0.415,
-            "ICMS": 0.34,
-        },
+        "partilhas": {"CPP": 0.6875, "CSLL": 0.0, "ICMS": 0.3125, "IRPJ": 0.0, "Cofins": 0.0, "PIS": 0.0},
     },
     {
-        "limite_superior": 360000.00,
-        "aliquota_nominal": 0.073,
-        "desconto": 5940.00,
-        "partilhas": {
-            "IRPJ": 0.055,
-            "CSLL": 0.035,
-            "Cofins": 0.1274,
-            "Pis": 0.0276,
-            "CPP": 0.415,
-            "ICMS": 0.34,
-        },
+        "limite_superior": 360000.0,
+        "aliquota_nominal": 0.0547,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.5027, "CSLL": 0.0, "ICMS": 0.3399, "IRPJ": 0.0, "Cofins": 0.1572, "PIS": 0.0},
     },
     {
-        "limite_superior": 720000.00,
-        "aliquota_nominal": 0.095,
-        "desconto": 13860.00,
-        "partilhas": {
-            "IRPJ": 0.055,
-            "CSLL": 0.035,
-            "Cofins": 0.1274,
-            "Pis": 0.0276,
-            "CPP": 0.42,
-            "ICMS": 0.335,
-        },
+        "limite_superior": 540000.0,
+        "aliquota_nominal": 0.0684,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.4023, "CSLL": 0.0453, "ICMS": 0.3406, "IRPJ": 0.0395, "Cofins": 0.1389, "PIS": 0.0336},
     },
     {
-        "limite_superior": 1800000.00,
-        "aliquota_nominal": 0.107,
-        "desconto": 22500.00,
-        "partilhas": {
-            "IRPJ": 0.055,
-            "CSLL": 0.035,
-            "Cofins": 0.1274,
-            "Pis": 0.0276,
-            "CPP": 0.42,
-            "ICMS": 0.335,
-        },
+        "limite_superior": 720000.0,
+        "aliquota_nominal": 0.0754,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3965, "CSLL": 0.0464, "ICMS": 0.3395, "IRPJ": 0.0464, "Cofins": 0.1379, "PIS": 0.0331},
     },
     {
-        "limite_superior": 3600000.00,
-        "aliquota_nominal": 0.143,
-        "desconto": 87300.00,
-        "partilhas": {
-            "IRPJ": 0.055,
-            "CSLL": 0.035,
-            "Cofins": 0.1274,
-            "Pis": 0.0276,
-            "CPP": 0.42,
-            "ICMS": 0.335,
-        },
+        "limite_superior": 900000.0,
+        "aliquota_nominal": 0.076,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3974, "CSLL": 0.0461, "ICMS": 0.3395, "IRPJ": 0.0461, "Cofins": 0.1382, "PIS": 0.0329},
     },
     {
-        "limite_superior": 4800000.00,
-        "aliquota_nominal": 0.19,
-        "desconto": 378000.00,
-        "partilhas": {
-            "IRPJ": 0.135,
-            "CSLL": 0.10,
-            "Cofins": 0.2827,
-            "Pis": 0.0613,
-            "CPP": 0.421,
-            "ICMS": 0.0,
-        },
+        "limite_superior": 1080000.0,
+        "aliquota_nominal": 0.0828,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3966, "CSLL": 0.0459, "ICMS": 0.3401, "IRPJ": 0.0459, "Cofins": 0.1389, "PIS": 0.0326},
+    },
+    {
+        "limite_superior": 1260000.0,
+        "aliquota_nominal": 0.0836,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3946, "CSLL": 0.0467, "ICMS": 0.3397, "IRPJ": 0.0467, "Cofins": 0.1388, "PIS": 0.0335},
+    },
+    {
+        "limite_superior": 1440000.0,
+        "aliquota_nominal": 0.0845,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3964, "CSLL": 0.0462, "ICMS": 0.3396, "IRPJ": 0.0462, "Cofins": 0.1385, "PIS": 0.0331},
+    },
+    {
+        "limite_superior": 1620000.0,
+        "aliquota_nominal": 0.0903,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3958, "CSLL": 0.0465, "ICMS": 0.3402, "IRPJ": 0.0465, "Cofins": 0.1385, "PIS": 0.0332},
+    },
+    {
+        "limite_superior": 1800000.0,
+        "aliquota_nominal": 0.0912,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3947, "CSLL": 0.0471, "ICMS": 0.3399, "IRPJ": 0.0471, "Cofins": 0.1382, "PIS": 0.0329},
+    },
+    {
+        "limite_superior": 1980000.0,
+        "aliquota_nominal": 0.0995,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.395, "CSLL": 0.0462, "ICMS": 0.3392, "IRPJ": 0.0462, "Cofins": 0.1387, "PIS": 0.0332},
+    },
+    {
+        "limite_superior": 2160000.0,
+        "aliquota_nominal": 0.1004,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3972, "CSLL": 0.0459, "ICMS": 0.3397, "IRPJ": 0.0459, "Cofins": 0.1384, "PIS": 0.0329},
+    },
+    {
+        "limite_superior": 2340000.0,
+        "aliquota_nominal": 0.1013,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3960, "CSLL": 0.0464, "ICMS": 0.3405, "IRPJ": 0.0464, "Cofins": 0.1382, "PIS": 0.0326},
+    },
+    {
+        "limite_superior": 2520000.0,
+        "aliquota_nominal": 0.1023,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3960, "CSLL": 0.0459, "ICMS": 0.3402, "IRPJ": 0.0459, "Cofins": 0.1389, "PIS": 0.0332},
+    },
+    {
+        "limite_superior": 2700000.0,
+        "aliquota_nominal": 0.1032,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3953, "CSLL": 0.0465, "ICMS": 0.3402, "IRPJ": 0.0465, "Cofins": 0.1385, "PIS": 0.0329},
+    },
+    {
+        "limite_superior": 2880000.0,
+        "aliquota_nominal": 0.1123,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3953, "CSLL": 0.0463, "ICMS": 0.3402, "IRPJ": 0.0463, "Cofins": 0.1389, "PIS": 0.0329},
+    },
+    {
+        "limite_superior": 3060000.0,
+        "aliquota_nominal": 0.1132,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3966, "CSLL": 0.0459, "ICMS": 0.3402, "IRPJ": 0.0459, "Cofins": 0.1387, "PIS": 0.0327},
+    },
+    {
+        "limite_superior": 3240000.0,
+        "aliquota_nominal": 0.1142,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3955, "CSLL": 0.0464, "ICMS": 0.3400, "IRPJ": 0.0464, "Cofins": 0.1382, "PIS": 0.0332},
+    },
+    {
+        "limite_superior": 3420000.0,
+        "aliquota_nominal": 0.1151,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3960, "CSLL": 0.0460, "ICMS": 0.3393, "IRPJ": 0.0460, "Cofins": 0.1390, "PIS": 0.0330},
+    },
+    {
+        "limite_superior": 3600000.0,
+        "aliquota_nominal": 0.1161,
+        "desconto": 0.0,
+        "partilhas": {"CPP": 0.3960, "CSLL": 0.0465, "ICMS": 0.3401, "IRPJ": 0.0465, "Cofins": 0.1377, "PIS": 0.0327},
     },
 ]
 
@@ -131,11 +172,11 @@ class GuiaSimplesNacionalAnexo1:
         mes = self.data_base.month
 
         resultado = (
-            db.query(func.sum(PagarRateio.valor_rateio))
+            db.query(func.sum(PagarRateio.rateio_vlrrateio))
             .filter(
-                PagarRateio.tipo_conta == 88,
-                extract("year", PagarRateio.data_vencimento) == ano,
-                extract("month", PagarRateio.data_vencimento) == mes,
+                PagarRateio.rateio_tipoconta == 88,
+                extract("year", PagarRateio.rateio_dtvencimento) == ano,
+                extract("month", PagarRateio.rateio_dtvencimento) == mes,
             )
             .scalar()
         )
@@ -184,7 +225,7 @@ class GuiaSimplesNacionalAnexo1:
             irpj=resultado["IRPJ"],
             csll=resultado["CSLL"],
             cofins=resultado["Cofins"],
-            pis=resultado["Pis"],
+            pis=resultado["PIS"],
             cpp=resultado["CPP"],
             icms=resultado["ICMS"],
             total_guia=resultado["total_guia"],

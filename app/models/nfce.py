@@ -6,3 +6,4 @@ class Nfce(Base):
 
     ide_codigo = Column(Integer, primary_key=True, index=True)
     ide_dhemi = Column(Date)
+    mov_estoque = Column(Integer)
