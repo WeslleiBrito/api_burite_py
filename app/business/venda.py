@@ -1,11 +1,20 @@
-from typing import List
-from typing_extensions import TypedDict
+from typing import List, Tuple
+from typing_extensions import TypedDict, Dict
 from app.models.venda_item import VendaItem
 from app.db.session import SessionLocal
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_
 from datetime import date
 
+
+class RetornoVenda(TypedDict):
+    venda: int
+    cod_vendedor: int | None
+    vendedor_descricao: str
+    desconto: float
+    custo: float
+    faturamento: float
+    data_venda: date | Tuple[date]
 
 class RetornoVendaItem(TypedDict):
     item_cod: int
@@ -93,7 +102,35 @@ class Venda:
 
         return retorno
 
-    def venda(self, data_inicio: date | None = None, data_fim: date | None = None):
+    def venda_por_periodo(self, data_inicio: date | None = None, data_fim: date | None = None):
+
+        resultado = self.venda_item_periodo(data_inicio, data_fim)
+
+        vendas: Dict[str, RetornoVenda] = {}
+
+        for item in resultado:
+
+            for i in resultado:
+                if i["venda"] == item["venda"]:
+                    if not str(item["venda"]) in vendas.keys():
+                        venda_o: RetornoVenda = {
+                            "venda": item["venda"],
+                            "desconto": item["desconto"],
+                            "cod_vendedor": item["cod_vendedor"],
+                            "vendedor_descricao": item["nome_vendedor"],
+                            "data_venda": item["data_venda"],
+                            "custo": 0.0,
+                            "faturamento": 0.0
+                        }
+
+                        vendas[str(item["venda"])] = venda_o
+
+                    vendas[str(item["venda"])]["custo"] += i["custo"]
+                    vendas[str(item["venda"])]["faturamento"] += i["total"]
+
+        return vendas
+
+    def venda_por_periodo_vendedor(self, data_inicio: date | None = None, data_fim: date | None = None) -> Dict[str, RetornoVenda]:
 
         data_i: date | None = data_inicio
         data_f: date | None = data_fim
@@ -106,14 +143,38 @@ class Venda:
         elif data_i and not data_f:
             data_f = date.today()
 
+        resultado = self.venda_item_periodo(data_i, data_f)
 
+        vendas: Dict[str, RetornoVenda] = {}
 
+        for item in resultado:
 
+            for i in resultado:
+                if i["cod_vendedor"] == item["cod_vendedor"]:
+                    if not str(item["cod_vendedor"]) in vendas.keys():
+                        venda_o: RetornoVenda = {
+                            "venda": item["venda"],
+                            "desconto": item["desconto"],
+                            "cod_vendedor": item["cod_vendedor"],
+                            "vendedor_descricao": item["nome_vendedor"],
+                            "data_venda": (data_i, data_f),
+                            "custo": 0.0,
+                            "faturamento": 0.0
+                        }
+
+                        vendas[str(item["cod_vendedor"])] = venda_o
+
+                    vendas[str(item["cod_vendedor"])]["custo"] += i["custo"]
+                    vendas[str(item["cod_vendedor"])]["faturamento"] += i["total"]
+
+        return vendas
 
 if __name__ == "__main__":
     relatorio = Venda()
+    venda = relatorio.venda_por_periodo()
+    vendedor = relatorio.venda_por_periodo_vendedor(date(2025, 5, 13), date(2025, 5, 13))
 
-    itens = relatorio.venda_item_periodo()
+    print(vendedor)
 
-    for item in itens:
-        print(item)
+
+
