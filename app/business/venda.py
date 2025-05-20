@@ -1,36 +1,18 @@
-from typing import List, Tuple
-from typing_extensions import TypedDict, Dict
+from typing import List
+from app.models import Produto, ResumeSubgroupo, Funcionario
 from app.models.venda_item import VendaItem
+from app.models.venda import Venda as vendaModel
 from app.db.session import SessionLocal
 from sqlalchemy.orm import joinedload
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from datetime import date
+from app.tipos.retorno_venda import RetornoVenda
+from app.tipos.retorno_venda_item import RetornoVendaItem
+from app.tipos.retorno_venda_vendedor import RetornoVendaVendedor
+from app.tipos.retorno_faturamento import RetornoFaturamento
 
 
-class RetornoVenda(TypedDict):
-    venda: int
-    cod_vendedor: int | None
-    vendedor_descricao: str
-    desconto: float
-    custo: float
-    faturamento: float
-    data_venda: date | Tuple[date]
-
-class RetornoVendaItem(TypedDict):
-    item_cod: int
-    venda: int
-    cod_produto: int
-    descricao: str
-    qtd: float
-    qtd_devolvida: float
-    custo: float
-    desconto: float
-    total: float
-    data_venda: date
-    cod_vendedor: int | None
-    nome_vendedor: str
-
-
+# noinspection PyTypedDict
 class Venda:
     def __init__(self):
         self.db = SessionLocal()
@@ -102,35 +84,7 @@ class Venda:
 
         return retorno
 
-    def venda_por_periodo(self, data_inicio: date | None = None, data_fim: date | None = None):
-
-        resultado = self.venda_item_periodo(data_inicio, data_fim)
-
-        vendas: Dict[str, RetornoVenda] = {}
-
-        for item in resultado:
-
-            for i in resultado:
-                if i["venda"] == item["venda"]:
-                    if not str(item["venda"]) in vendas.keys():
-                        venda_o: RetornoVenda = {
-                            "venda": item["venda"],
-                            "desconto": item["desconto"],
-                            "cod_vendedor": item["cod_vendedor"],
-                            "vendedor_descricao": item["nome_vendedor"],
-                            "data_venda": item["data_venda"],
-                            "custo": 0.0,
-                            "faturamento": 0.0
-                        }
-
-                        vendas[str(item["venda"])] = venda_o
-
-                    vendas[str(item["venda"])]["custo"] += i["custo"]
-                    vendas[str(item["venda"])]["faturamento"] += i["total"]
-
-        return vendas
-
-    def venda_por_periodo_vendedor(self, data_inicio: date | None = None, data_fim: date | None = None) -> Dict[str, RetornoVenda]:
+    def venda_por_vendedor_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> List[RetornoVendaVendedor]:
 
         data_i: date | None = data_inicio
         data_f: date | None = data_fim
@@ -143,38 +97,142 @@ class Venda:
         elif data_i and not data_f:
             data_f = date.today()
 
-        resultado = self.venda_item_periodo(data_i, data_f)
+        db = SessionLocal()
 
-        vendas: Dict[str, RetornoVenda] = {}
+        vi = VendaItem
+        p = Produto
+        rs = ResumeSubgroupo
+        v = vendaModel
+        f = Funcionario
 
-        for item in resultado:
+        query = (
+            self.db.query(
+                f.fun_cod.label("cod_vendedor"),
+                f.fun_nome.label("vendedor_descricao"),
+                func.sum(vi.desconto).label("desconto"),
+                func.sum((vi.qtd - vi.qtd_devolvida) * vi.vrcusto_composicao).label("custo"),
+                func.sum((vi.total / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("faturamento"),
+            )
+            .join(p, vi.produto == p.prod_cod)
+            .join(rs, rs.cod_subgroup == p.prod_subgrupo)
+            .join(v, vi.venda == v.vend_cod)
+            .join(f, v.vendedor == f.fun_cod)
+            .filter(vi.dtvenda.between(data_i, data_f))
+            .group_by(f.fun_cod, f.fun_nome)
+        )
 
-            for i in resultado:
-                if i["cod_vendedor"] == item["cod_vendedor"]:
-                    if not str(item["cod_vendedor"]) in vendas.keys():
-                        venda_o: RetornoVenda = {
-                            "venda": item["venda"],
-                            "desconto": item["desconto"],
-                            "cod_vendedor": item["cod_vendedor"],
-                            "vendedor_descricao": item["nome_vendedor"],
-                            "data_venda": (data_i, data_f),
-                            "custo": 0.0,
-                            "faturamento": 0.0
-                        }
+        resultados = query.all()
 
-                        vendas[str(item["cod_vendedor"])] = venda_o
+        retorno: List[RetornoVendaVendedor] = []
 
-                    vendas[str(item["cod_vendedor"])]["custo"] += i["custo"]
-                    vendas[str(item["cod_vendedor"])]["faturamento"] += i["total"]
+        for row in resultados:
+            item: RetornoVendaVendedor = {
+                "cod_vendedor": row.cod_vendedor,
+                "vendedor_descricao": row.vendedor_descricao,
+                "desconto": float(row.desconto or 0),
+                "custo": float(row.custo or 0),
+                "faturamento": float(row.faturamento or 0),
+                "data_venda": (data_i, data_f)
+            }
+            retorno.append(item)
 
-        return vendas
+        return retorno
+
+    def venda_por_venda_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> List[RetornoVenda]:
+
+        data_i: date | None = data_inicio
+        data_f: date | None = data_fim
+
+        if not data_i and not data_f:
+            data_i = date.today()
+            data_f = date.today()
+        elif not data_i and data_f:
+            data_i = date(1970, 1, 1)
+        elif data_i and not data_f:
+            data_f = date.today()
+
+
+        vi = VendaItem
+        p = Produto
+        rs = ResumeSubgroupo
+        v = vendaModel
+        f = Funcionario
+
+        query = (
+            self.db.query(
+                v.vend_cod.label("venda"),
+                f.fun_cod.label("cod_vendedor"),
+                f.fun_nome.label("vendedor_descricao"),
+                func.sum((vi.desconto / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("desconto"),
+                func.sum((vi.qtd - vi.qtd_devolvida) * vi.vrcusto_composicao).label("custo"),
+                func.sum((vi.total / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("faturamento"),
+            )
+            .join(p, vi.produto == p.prod_cod)
+            .join(rs, rs.cod_subgroup == p.prod_subgrupo)
+            .join(v, vi.venda == v.vend_cod)
+            .join(f, v.vendedor == f.fun_cod)
+            .filter(vi.dtvenda.between(data_i, data_f))
+            .group_by(v.vend_cod, f.fun_nome)
+        )
+
+        resultados = query.all()
+
+        retorno: List[RetornoVenda] = []
+
+        for row in resultados:
+            item: RetornoVenda = {
+                "venda": row.venda,
+                "cod_vendedor": row.cod_vendedor,
+                "vendedor_descricao": row.vendedor_descricao,
+                "desconto": float(row.desconto or 0),
+                "custo": float(row.custo or 0),
+                "faturamento": float(row.faturamento or 0),
+                "data_venda": (data_i, data_f)
+            }
+            retorno.append(item)
+
+        return retorno
+
+    def faturamento_por_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> RetornoFaturamento:
+        data_i: date | None = data_inicio
+        data_f: date | None = data_fim
+
+        if not data_i and not data_f:
+            data_i = date.today()
+            data_f = date.today()
+        elif not data_i and data_f:
+            data_i = date(1970, 1, 1)
+        elif data_i and not data_f:
+            data_f = date.today()
+
+        vi = VendaItem
+
+        query = (
+            self.db.query(
+                func.sum((vi.desconto / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("desconto"),
+                func.sum((vi.qtd - vi.qtd_devolvida) * vi.vrcusto_composicao).label("custo"),
+                func.sum((vi.total / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("faturamento"),
+            )
+            .filter(vi.dtvenda.between(data_i, data_f))
+        )
+
+        resultados = query.all()
+
+        retorno: RetornoFaturamento = {
+            "faturamento": resultados[0].faturamento,
+            "custo": resultados[0].custo,
+            "desconto": resultados[0].desconto,
+            "data": (data_i, data_f)
+        }
+
+        return retorno
+
 
 if __name__ == "__main__":
     relatorio = Venda()
-    venda = relatorio.venda_por_periodo()
-    vendedor = relatorio.venda_por_periodo_vendedor(date(2025, 5, 13), date(2025, 5, 13))
+    r = relatorio.faturamento_por_periodo()
+    print(r)
 
-    print(vendedor)
 
 
 
