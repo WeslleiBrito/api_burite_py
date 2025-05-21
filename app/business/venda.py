@@ -155,7 +155,7 @@ class Venda:
 
         for row in resultados:
             item: RetornoVenda = {
-                "venda": row.venda_service,
+                "venda": row.venda,
                 "cod_vendedor": row.cod_vendedor,
                 "vendedor_descricao": row.vendedor_descricao,
                 "desconto": float(row.desconto or 0),
