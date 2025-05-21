@@ -3,7 +3,7 @@ from datetime import date
 
 
 class RetornoFaturamento(TypedDict):
-    faturamento: str
-    custo: str
-    desconto: str
+    faturamento: float
+    custo: float
+    desconto: float
     data: Tuple[date]

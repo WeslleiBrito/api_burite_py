@@ -3,6 +3,7 @@ from datetime import date
 from app.business.tools.consultar_despesa import ConsultaDespesa
 from app.business.tools.calculo_simples_nacional import GuiaSimplesNacionalAnexo1
 import calendar
+from app.business.tools.gerar_data import gerar_data
 from app.models.pagar_rateio import PagarRateio
 from app.models.tipo_conta import TipoConta
 from app.db.session import SessionLocal
@@ -10,29 +11,27 @@ from app.db.session import SessionLocal
 
 
 class Despesas:
-    def __init__(self, data_base: date):
-        self.db = SessionLocal()
-        self.data_base = data_base
+    def __init__(self, data_inicio: date | None = None, data_fim: date | None = None):
+
+        self._data_i, self._data_f = gerar_data(data_inicio, data_fim).values()
+        self._primeiro_dia = self._data_i.replace(day=1)
+        self._ultimo_dia = self._data_f.replace(day=calendar.monthrange(self._data_f.year, self._data_f.month)[1])
+        self._db = SessionLocal()
         self.despesas_fixas = 0.0
         self.despesas_variaveis = 0.0
         self._calcular()
 
     def _calcular(self):
-        # Define o primeiro e último dia do mês da data_base
-        primeiro_dia = self.data_base.replace(day=1)
-        ultimo_dia = self.data_base.replace(day=calendar.monthrange(self.data_base.year, self.data_base.month)[1])
-
-        # Query ORM para somar valores agrupando por conta_fixa
         resultados = (
-            self.db.query(
+            self._db.query(
                 func.sum(PagarRateio.rateio_vlrrateio),
                 TipoConta.conta_fixa
             )
             .join(TipoConta, PagarRateio.rateio_tipoconta == TipoConta.tipocont_cod)
             .filter(
                 and_(
-                    PagarRateio.rateio_dtvencimento >= primeiro_dia,
-                    PagarRateio.rateio_dtvencimento <= ultimo_dia,
+                    PagarRateio.rateio_dtvencimento >= self._primeiro_dia,
+                    PagarRateio.rateio_dtvencimento <= self._ultimo_dia,
                     ~PagarRateio.rateio_tipoconta.in_([79, 75])  # exclui essas contas
                 )
             )
@@ -47,14 +46,14 @@ class Despesas:
                 self.despesas_variaveis = total or 0.0
 
 
-        verifica_imposto_simples = ConsultaDespesa(data_base=self.data_base, codigo_despesa=88).despesa_existe()
+        verifica_imposto_simples = ConsultaDespesa(data_base=self._ultimo_dia, codigo_despesa=88).despesa_existe()
 
         if not verifica_imposto_simples:
-            i = GuiaSimplesNacionalAnexo1(data_base=self.data_base).calcular().total_guia
+            i = GuiaSimplesNacionalAnexo1(data_base=self._primeiro_dia).calcular().total_guia
             self.despesas_variaveis += i
 
 
 if __name__ == "__main__":
-    despesa = Despesas(date(2025, 5, 16))
+    despesa = Despesas(date(2025, 1, 12), date(2025, 4, 10))
 
     print(despesa.despesas_variaveis, despesa.despesas_fixas)

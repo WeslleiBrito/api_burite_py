@@ -1,4 +1,5 @@
 from typing import List
+from app.business.tools.gerar_data import gerar_data
 from app.models import Produto, ResumeSubgroupo, Funcionario
 from app.models.venda_item import VendaItem
 from app.models.venda import Venda as vendaModel
@@ -6,32 +7,25 @@ from app.db.session import SessionLocal
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, func
 from datetime import date
+import datetime
+from app.schemas.venda_item import VendaItemResumo
 from app.tipos.retorno_venda import RetornoVenda
 from app.tipos.retorno_venda_item import RetornoVendaItem
 from app.tipos.retorno_venda_vendedor import RetornoVendaVendedor
 from app.tipos.retorno_faturamento import RetornoFaturamento
 
 
-# noinspection PyTypedDict
+# noinspection PyTypedDict,PyShadowingNames
 class Venda:
     def __init__(self):
-        self.db = SessionLocal()
+        self._db = SessionLocal()
 
     def venda_item_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> List[RetornoVendaItem]:
 
-        data_i: date | None = data_inicio
-        data_f: date | None = data_fim
-
-        if not data_i and not data_f:
-            data_i = date.today()
-            data_f = date.today()
-        elif not data_i and data_f:
-            data_i = date(1970, 1, 1)
-        elif data_i and not data_f:
-            data_f = date.today()
+        data_i, data_f = gerar_data(data_inicio, data_fim).values()
 
         resultados: List[VendaItem] = (
-            self.db.query(VendaItem)
+            self._db.query(VendaItem)
             .options(
                 joinedload(VendaItem.produto_rel),
                 joinedload(VendaItem.vendedor_rel)
@@ -86,18 +80,7 @@ class Venda:
 
     def venda_por_vendedor_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> List[RetornoVendaVendedor]:
 
-        data_i: date | None = data_inicio
-        data_f: date | None = data_fim
-
-        if not data_i and not data_f:
-            data_i = date.today()
-            data_f = date.today()
-        elif not data_i and data_f:
-            data_i = date(1970, 1, 1)
-        elif data_i and not data_f:
-            data_f = date.today()
-
-        db = SessionLocal()
+        data_i, data_f = gerar_data(data_inicio, data_fim).values()
 
         vi = VendaItem
         p = Produto
@@ -106,7 +89,7 @@ class Venda:
         f = Funcionario
 
         query = (
-            self.db.query(
+            self._db.query(
                 f.fun_cod.label("cod_vendedor"),
                 f.fun_nome.label("vendedor_descricao"),
                 func.sum(vi.desconto).label("desconto"),
@@ -140,16 +123,7 @@ class Venda:
 
     def venda_por_venda_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> List[RetornoVenda]:
 
-        data_i: date | None = data_inicio
-        data_f: date | None = data_fim
-
-        if not data_i and not data_f:
-            data_i = date.today()
-            data_f = date.today()
-        elif not data_i and data_f:
-            data_i = date(1970, 1, 1)
-        elif data_i and not data_f:
-            data_f = date.today()
+        data_i, data_f = gerar_data(data_inicio, data_fim).values()
 
 
         vi = VendaItem
@@ -159,7 +133,7 @@ class Venda:
         f = Funcionario
 
         query = (
-            self.db.query(
+            self._db.query(
                 v.vend_cod.label("venda"),
                 f.fun_cod.label("cod_vendedor"),
                 f.fun_nome.label("vendedor_descricao"),
@@ -181,7 +155,7 @@ class Venda:
 
         for row in resultados:
             item: RetornoVenda = {
-                "venda": row.venda,
+                "venda": row.venda_service,
                 "cod_vendedor": row.cod_vendedor,
                 "vendedor_descricao": row.vendedor_descricao,
                 "desconto": float(row.desconto or 0),
@@ -194,21 +168,13 @@ class Venda:
         return retorno
 
     def faturamento_por_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> RetornoFaturamento:
-        data_i: date | None = data_inicio
-        data_f: date | None = data_fim
 
-        if not data_i and not data_f:
-            data_i = date.today()
-            data_f = date.today()
-        elif not data_i and data_f:
-            data_i = date(1970, 1, 1)
-        elif data_i and not data_f:
-            data_f = date.today()
+        data_i, data_f = gerar_data(data_inicio, data_fim).values()
 
         vi = VendaItem
 
         query = (
-            self.db.query(
+            self._db.query(
                 func.sum((vi.desconto / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("desconto"),
                 func.sum((vi.qtd - vi.qtd_devolvida) * vi.vrcusto_composicao).label("custo"),
                 func.sum((vi.total / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("faturamento"),
@@ -227,11 +193,46 @@ class Venda:
 
         return retorno
 
+    def venda_produto_id_anual_mes_por_mes(self, produto_id: int) -> List[VendaItemResumo]:
+        hoje = datetime.date.today()
+        doze_meses_atras = hoje - datetime.timedelta(days=365)
+
+        resultados = (
+            self._db.query(
+                func.date_format(VendaItem.dtvenda, "%Y-%m").label("mes"),
+                func.sum(VendaItem.qtd - VendaItem.qtd_devolvida).label("total_quantidade"),
+                func.sum(
+                    (VendaItem.total / VendaItem.qtd) * (VendaItem.qtd - VendaItem.qtd_devolvida)
+                ).label("total_vendido"),
+                func.sum(
+                    VendaItem.vrcusto_composicao * (VendaItem.qtd - VendaItem.qtd_devolvida)
+                ).label("custo_total"),
+            )
+            .filter(
+                VendaItem.produto == produto_id,
+                VendaItem.dtvenda >= doze_meses_atras
+            )
+            .group_by(func.date_format(VendaItem.dtvenda, "%Y-%m"))
+            .order_by(func.date_format(VendaItem.dtvenda, "%Y-%m"))
+            .all()
+        )
+
+        return [
+            VendaItemResumo(
+                mes=res.mes,
+                total_quantidade=res.total_quantidade,
+                total_vendido=res.total_vendido,
+                custo_total=res.custo_total
+            )
+            for res in resultados
+        ]
 
 if __name__ == "__main__":
     relatorio = Venda()
-    r = relatorio.faturamento_por_periodo()
-    print(r)
+    r = relatorio.venda_produto_id_anual_mes_por_mes(20003)
+
+    for v in r:
+        print(v)
 
 
 
