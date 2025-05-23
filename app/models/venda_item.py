@@ -27,3 +27,9 @@ class VendaItem(Base):
         viewonly=True,
         backref=backref("itens_vendidos", viewonly=True)
     )
+
+    @property
+    def fixed_unit_expense(self) -> float | None:
+        if self.produto_rel and self.produto_rel.subgrupo_rel:
+            return self.produto_rel.subgrupo_rel.fixed_unit_expense
+        return None  # ou return 0.0, se quiser evitar None

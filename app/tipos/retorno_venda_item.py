@@ -15,3 +15,8 @@ class RetornoVendaItem(TypedDict):
     data_venda: date
     cod_vendedor: int | None
     nome_vendedor: str
+    despesa_fixa: float
+    despesa_variavel: float
+    comissao: float
+    lucro: float
+    lucro_percentual: float

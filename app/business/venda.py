@@ -1,14 +1,16 @@
 from typing import List
 from app.business.tools.gerar_data import gerar_data
+from app.business.valores_totais import TotalValues
 from app.models import Produto, ResumeSubgroupo, Funcionario
 from app.models.venda_item import VendaItem
 from app.models.venda import Venda as vendaModel
 from app.db.session import SessionLocal
 from sqlalchemy.orm import joinedload
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, distinct
 from datetime import date
 import datetime
 from app.schemas.venda_item import VendaItemResumo
+from app.tipos.retorno_total_values import RetornoTotalValues
 from app.tipos.retorno_venda import RetornoVenda
 from app.tipos.retorno_venda_item import RetornoVendaItem
 from app.tipos.retorno_venda_vendedor import RetornoVendaVendedor
@@ -19,6 +21,8 @@ from app.tipos.retorno_faturamento import RetornoFaturamento
 class Venda:
     def __init__(self):
         self._db = SessionLocal()
+        self._total_values: RetornoTotalValues = TotalValues().total_values()
+
 
     def venda_item_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> List[RetornoVendaItem]:
 
@@ -27,7 +31,7 @@ class Venda:
         resultados: List[VendaItem] = (
             self._db.query(VendaItem)
             .options(
-                joinedload(VendaItem.produto_rel),
+                joinedload(VendaItem.produto_rel).joinedload(Produto.subgrupo_rel),
                 joinedload(VendaItem.vendedor_rel)
             )
             .filter(
@@ -46,6 +50,7 @@ class Venda:
             qtd_devolvida = venda_item.qtd_devolvida
             nova_quantidade = qtd - qtd_devolvida
 
+
             custo = round(qtd * venda_item.vrcusto_composicao, 2)
             total = venda_item.total
             desconto = venda_item.desconto
@@ -54,6 +59,16 @@ class Venda:
                 total = (total / qtd) * nova_quantidade
                 custo = round(venda_item.vrcusto_composicao * nova_quantidade, 2)
                 desconto = round((desconto / qtd) * nova_quantidade)
+
+            despesa_fixa: float = round(nova_quantidade * venda_item.fixed_unit_expense, 3)
+            despesa_variavel: float = round(total * float(self._total_values["porcentagem_despesa_variavel"]), 3)
+            comissao: float = round(total * float(self._total_values["comissao"]), 3)
+
+            if (comissao + despesa_variavel  + custo + despesa_fixa) > total:
+                comissao = 0.0
+
+            lucro: float = round(total - (custo + despesa_fixa + despesa_variavel + comissao), 3)
+            lucro_p: float = round(lucro / total, 3)
 
             vendedor = venda_item.vendedor_rel[0] if venda_item.vendedor_rel else None
             cod_vendedor = vendedor.fun_cod if vendedor else None
@@ -71,7 +86,12 @@ class Venda:
                 "total": total,
                 "data_venda": venda_item.dtvenda,
                 "cod_vendedor": cod_vendedor,
-                "nome_vendedor": nome_vendedor
+                "nome_vendedor": nome_vendedor,
+                "despesa_fixa": despesa_fixa,
+                "despesa_variavel": despesa_variavel,
+                "comissao": comissao,
+                "lucro": lucro,
+                "lucro_percentual": lucro_p
             }
 
             retorno.append(item_retorno)
@@ -93,8 +113,10 @@ class Venda:
                 f.fun_cod.label("cod_vendedor"),
                 f.fun_nome.label("vendedor_descricao"),
                 func.sum(vi.desconto).label("desconto"),
+                func.count(distinct(v.vend_cod)).label("quantidade_vendas"),
                 func.sum((vi.qtd - vi.qtd_devolvida) * vi.vrcusto_composicao).label("custo"),
                 func.sum((vi.total / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("faturamento"),
+                func.sum((vi.qtd - vi.qtd_devolvida) * rs.fixed_unit_expense).label("despesa_fixa")
             )
             .join(p, vi.produto == p.prod_cod)
             .join(rs, rs.cod_subgroup == p.prod_subgrupo)
@@ -109,12 +131,27 @@ class Venda:
         retorno: List[RetornoVendaVendedor] = []
 
         for row in resultados:
+            comissao = row.faturamento * float(self._total_values["comissao"])
+            despesa_variavel = row.faturamento * float(self._total_values["porcentagem_despesa_variavel"])
+
+            if (comissao + row.custo + despesa_variavel + row.despesa_fixa) > row.faturamento:
+                comissao = 0.0
+
+            lucro = row.faturamento - (comissao + row.custo + despesa_variavel + row.despesa_fixa)
+            lucro_p = round(lucro / row.faturamento, 3)
+
             item: RetornoVendaVendedor = {
                 "cod_vendedor": row.cod_vendedor,
                 "vendedor_descricao": row.vendedor_descricao,
                 "desconto": float(row.desconto or 0),
                 "custo": float(row.custo or 0),
                 "faturamento": float(row.faturamento or 0),
+                "despesa_fixa": row.despesa_fixa,
+                "despesa_variavel": round(despesa_variavel, 3),
+                "comissao": round(comissao, 3),
+                "lucro": round(lucro, 3),
+                "lucro_percentual": round(lucro_p, 3),
+                "quantidade_vendas": row.quantidade_vendas,
                 "data_venda": (data_i, data_f)
             }
             retorno.append(item)
@@ -140,6 +177,7 @@ class Venda:
                 func.sum((vi.desconto / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("desconto"),
                 func.sum((vi.qtd - vi.qtd_devolvida) * vi.vrcusto_composicao).label("custo"),
                 func.sum((vi.total / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("faturamento"),
+                func.sum((vi.qtd - vi.qtd_devolvida) * rs.fixed_unit_expense).label("despesa_fixa")
             )
             .join(p, vi.produto == p.prod_cod)
             .join(rs, rs.cod_subgroup == p.prod_subgrupo)
@@ -154,6 +192,16 @@ class Venda:
         retorno: List[RetornoVenda] = []
 
         for row in resultados:
+
+            comissao = row.faturamento * float(self._total_values["comissao"])
+            despesa_variavel = row.faturamento * float(self._total_values["porcentagem_despesa_variavel"])
+
+            if (comissao + row.custo + despesa_variavel + row.despesa_fixa) > row.faturamento:
+                comissao = 0.0
+
+            lucro = row.faturamento - (comissao + row.custo + despesa_variavel + row.despesa_fixa)
+            lucro_p = round(lucro / row.faturamento, 3)
+
             item: RetornoVenda = {
                 "venda": row.venda,
                 "cod_vendedor": row.cod_vendedor,
@@ -161,6 +209,11 @@ class Venda:
                 "desconto": float(row.desconto or 0),
                 "custo": float(row.custo or 0),
                 "faturamento": float(row.faturamento or 0),
+                "despesa_fixa": row.despesa_fixa,
+                "despesa_variavel": round(despesa_variavel, 3),
+                "comissao": round(comissao, 3),
+                "lucro": round(lucro, 3),
+                "lucro_percentual": round(lucro_p, 3),
                 "data_venda": (data_i, data_f)
             }
             retorno.append(item)
@@ -226,6 +279,7 @@ class Venda:
             )
             for res in resultados
         ]
+
 
 if __name__ == "__main__":
     relatorio = Venda()
