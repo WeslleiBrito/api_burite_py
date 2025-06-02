@@ -45,4 +45,4 @@ class ResumoFinanceiro:
 
 if __name__ == "__main__":
     resumo_financeiro = ResumoFinanceiro()
-    print(resumo_financeiro.resumo(date(2025, 5, 6)))
+    print(resumo_financeiro.resumo())
