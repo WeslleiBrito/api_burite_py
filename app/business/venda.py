@@ -31,8 +31,7 @@ class Venda:
         resultados: List[VendaItem] = (
             self._db.query(VendaItem)
             .options(
-                joinedload(VendaItem.produto_rel).joinedload(Produto.subgrupo_rel),
-                joinedload(VendaItem.vendedor_rel)
+                joinedload(VendaItem.produto_rel).joinedload(Produto.subgrupo_rel)
             )
             .filter(
                 and_(
@@ -283,7 +282,7 @@ class Venda:
 
 if __name__ == "__main__":
     relatorio = Venda()
-    r = relatorio.venda_produto_id_anual_mes_por_mes(20003)
+    r = relatorio.venda_item_periodo()
 
     for v in r:
         print(v)

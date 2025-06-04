@@ -7,7 +7,5 @@ class ResumeSubgroupo(Base):
 
     cod_subgroup = Column(Integer, primary_key=True)
     fixed_unit_expense = Column(Float)
-    variable_expense_percentage = Column(Float)
-    commission = Column(Float)
 
     produtos = relationship("Produto", back_populates="subgrupo_rel")

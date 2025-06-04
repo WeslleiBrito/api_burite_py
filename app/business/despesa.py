@@ -32,7 +32,7 @@ class Despesas:
                 and_(
                     PagarRateio.rateio_dtvencimento >= self._primeiro_dia,
                     PagarRateio.rateio_dtvencimento <= self._ultimo_dia,
-                    ~PagarRateio.rateio_tipoconta.in_([79, 75])  # exclui essas contas
+                    ~PagarRateio.rateio_tipoconta.in_([79, 75, 193])  # exclui essas contas
                 )
             )
             .group_by(TipoConta.conta_fixa)
