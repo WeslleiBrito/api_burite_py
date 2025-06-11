@@ -45,4 +45,9 @@ def resumo_vendas(produto_id: int = Path(..., alias="id",gt=0,title="ID do Produ
     return venda_service.venda_produto_id_anual_mes_por_mes(produto_id)
 
 
-
+@router_venda.get("/resumo-total-venda")
+def venda_item(
+    data_inicial: Optional[date] = Query(None, title="Data Inicial", description="Data de início do período (yyyy-mm-dd)"),
+    data_final: Optional[date] = Query(None, title="Data Final", description="Data de fim do período (yyyy-mm-dd)")
+):
+    return venda_service.resumo_total_periodo(data_inicial, data_final)

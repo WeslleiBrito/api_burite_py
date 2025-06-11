@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, distinct
 from datetime import date
 import datetime
 from app.schemas.venda_item import VendaItemResumo
+from app.tipos.resumo_total import RetornoResumoTotal
 from app.tipos.retorno_total_values import RetornoTotalValues
 from app.tipos.retorno_venda import RetornoVenda
 from app.tipos.retorno_venda_item import RetornoVendaItem
@@ -96,6 +97,38 @@ class Venda:
             retorno.append(item_retorno)
 
         return retorno
+
+    def resumo_total_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> RetornoResumoTotal:
+
+        venda_item = self.venda_item_periodo(data_inicio, data_fim)
+
+        totais = {
+            "faturamento": 0.00,
+            "custo": 0.00,
+            "despesa_variavel": 0.00,
+            "comissao": 0.00,
+            "despesa_fixa": 0.00,
+            "lucro": 0.00,
+            "lucro_percentual": 0.00
+        }
+
+        for item in venda_item:
+            totais["faturamento"] += item["total"]
+            totais["custo"] += item["custo"]
+            totais["comissao"] += item["comissao"]
+            totais["despesa_variavel"] += item["despesa_variavel"]
+            totais["despesa_fixa"] += item["despesa_fixa"]
+            totais["lucro"] += item["lucro"]
+
+        totais["faturamento"] = round(totais["faturamento"], 2)
+        totais["custo"] = round(totais["custo"], 2)
+        totais["comissao"] = round(totais["comissao"], 2)
+        totais["despesa_variavel"] = round(totais["despesa_variavel"], 2)
+        totais["despesa_fixa"] = round(totais["despesa_fixa"], 2)
+        totais["lucro"] = round(totais["lucro"], 2)
+        totais["lucro_percentual"] = round((totais["lucro"] / totais["faturamento"]), 2)
+
+        return totais
 
     def venda_por_vendedor_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> List[RetornoVendaVendedor]:
 
@@ -282,10 +315,12 @@ class Venda:
 
 if __name__ == "__main__":
     relatorio = Venda()
-    r = relatorio.venda_item_periodo()
+    r = relatorio.resumo_total_periodo()
 
-    for v in r:
-        print(v)
+    print(r)
+
+    # for v in r:
+    #     print(v)
 
 
 
