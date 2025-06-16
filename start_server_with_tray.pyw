@@ -6,6 +6,7 @@ import sys
 from pystray import Icon, MenuItem, Menu
 from PIL import Image, UnidentifiedImageError
 from plyer import notification
+import psutil
 
 # Configurações
 PORTA = 8000
@@ -56,7 +57,6 @@ def iniciar_servidor():
                 "./venv/Scripts/python.exe",
                 "-m", "uvicorn",
                 "app.main:app",
-                "--reload",
                 "--port", str(PORTA)
             ],
             startupinfo=startupinfo,
@@ -69,12 +69,13 @@ def iniciar_servidor():
 
 
 def encerrar(icon, item):
-    """Encerra o servidor e remove o ícone da bandeja"""
     global processo
     try:
         if processo:
-            processo.terminate()
-            processo.wait()
+            parent = psutil.Process(processo.pid)
+            for child in parent.children(recursive=True):
+                child.terminate()
+            parent.terminate()
     except Exception as e:
         print(f"Erro ao encerrar servidor: {e}")
     finally:
