@@ -70,7 +70,7 @@ class Venda:
                     comissao = 0.0
 
                 lucro: float = round(total - (custo + despesa_fixa + despesa_variavel + comissao), 3)
-                lucro_p: float = round(lucro / total, 3)
+                lucro_p: float = round(lucro / total if lucro !=0 else 0, 3)
 
                 vendedor = venda_item.vendedor_rel[0] if venda_item.vendedor_rel else None
                 cod_vendedor = vendedor.fun_cod if vendedor else None
