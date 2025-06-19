@@ -6,7 +6,7 @@ from app.models.venda_item import VendaItem
 from app.models.venda import Venda as vendaModel
 from app.db.session import SessionLocal
 from sqlalchemy.orm import joinedload
-from sqlalchemy import and_, func, distinct
+from sqlalchemy import and_, func
 from datetime import date
 import datetime
 from app.schemas.venda_item import VendaItemResumo
@@ -136,125 +136,131 @@ class Venda:
 
         data_i, data_f = gerar_data(data_inicio, data_fim).values()
 
-        vi = VendaItem
-        p = Produto
-        rs = ResumeSubgroupo
-        v = vendaModel
-        f = Funcionario
 
-        with SessionLocal() as db:
-            query = (
-                db.query(
-                    f.fun_cod.label("cod_vendedor"),
-                    f.fun_nome.label("vendedor_descricao"),
-                    func.sum(vi.desconto).label("desconto"),
-                    func.count(distinct(v.vend_cod)).label("quantidade_vendas"),
-                    func.sum((vi.qtd - vi.qtd_devolvida) * vi.vrcusto_composicao).label("custo"),
-                    func.sum((vi.total / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("faturamento"),
-                    func.sum((vi.qtd - vi.qtd_devolvida) * rs.fixed_unit_expense).label("despesa_fixa")
-                )
-                .join(p, vi.produto == p.prod_cod)
-                .join(rs, rs.cod_subgroup == p.prod_subgrupo)
-                .join(v, vi.venda == v.vend_cod)
-                .join(f, v.vendedor == f.fun_cod)
-                .filter(vi.dtvenda.between(data_i, data_f))
-                .group_by(f.fun_cod, f.fun_nome)
-            )
+        venda_item: List[RetornoVendaItem] = self.venda_item_periodo(data_i, data_f)
 
-            resultados = query.all()
+        codigos_vendedores = set()
+        dados_vendedores: List[RetornoVendaVendedor] = []
 
-            retorno: List[RetornoVendaVendedor] = []
+        for vendedor in venda_item:
+            cod = vendedor["cod_vendedor"]
+            if cod not in codigos_vendedores:
+                codigos_vendedores.add(cod)
+                dados_vendedores.append({
+                    "cod_vendedor": cod,
+                    "vendedor_descricao": vendedor["nome_vendedor"],
+                    "desconto": 0.00,
+                    "custo": 0.00,
+                    "faturamento": 0.00,
+                    "despesa_fixa": 0.00,
+                    "despesa_variavel": 0.00,
+                    "comissao": 0.00,
+                    "lucro": 0.00,
+                    "lucro_percentual": 0.00,
+                    "quantidade_vendas": 0,
+                    "data_venda": (
+                        venda_item[0]["data_venda"],
+                        venda_item[-1]["data_venda"]
+                    )
+                })
 
-            for row in resultados:
-                comissao = row.faturamento * float(self._total_values["comissao"])
-                despesa_variavel = row.faturamento * float(self._total_values["porcentagem_despesa_variavel"])
+        venda_inserida = set()
 
-                if (comissao + row.custo + despesa_variavel + row.despesa_fixa) > row.faturamento:
-                    comissao = 0.0
+        for item in venda_item:
 
-                lucro = row.faturamento - (comissao + row.custo + despesa_variavel + row.despesa_fixa)
-                lucro_p = round(lucro / row.faturamento if (lucro > 0 and row.faturamento) else 0, 3)
+            for index, vendedor in enumerate(dados_vendedores):
 
-                item: RetornoVendaVendedor = {
-                    "cod_vendedor": row.cod_vendedor,
-                    "vendedor_descricao": row.vendedor_descricao,
-                    "desconto": float(row.desconto or 0),
-                    "custo": float(row.custo or 0),
-                    "faturamento": float(row.faturamento or 0),
-                    "despesa_fixa": row.despesa_fixa,
-                    "despesa_variavel": round(despesa_variavel, 3),
-                    "comissao": round(comissao, 3),
-                    "lucro": round(lucro, 3),
-                    "lucro_percentual": round(lucro_p, 3),
-                    "quantidade_vendas": row.quantidade_vendas,
-                    "data_venda": (data_i, data_f)
-                }
-                retorno.append(item)
+                if item["cod_vendedor"] == vendedor["cod_vendedor"]:
+                    dados_vendedores[index]["desconto"] += item["desconto"]
+                    dados_vendedores[index]["custo"] += item["custo"]
+                    dados_vendedores[index]["faturamento"] += item["total"]
+                    dados_vendedores[index]["despesa_fixa"] += item["despesa_fixa"]
+                    dados_vendedores[index]["despesa_variavel"] += item["despesa_variavel"]
+                    dados_vendedores[index]["comissao"] += item["comissao"]
+                    dados_vendedores[index]["lucro"] += item["lucro"]
+                    dados_vendedores[index]["quantidade_vendas"] += 1 if item["venda"] not in venda_inserida else 0
+                    dados_vendedores[index]["desconto"] += item["desconto"]
+                    venda_inserida.add(item["venda"])
 
-            return retorno
+
+
+        for index, ven in enumerate(dados_vendedores):
+
+            dados_vendedores[index]["desconto"] = round(dados_vendedores[index]["desconto"], 2)
+            dados_vendedores[index]["custo"] = round(dados_vendedores[index]["custo"], 2)
+            dados_vendedores[index]["faturamento"] = round(dados_vendedores[index]["faturamento"], 2)
+            dados_vendedores[index]["despesa_fixa"] = round(dados_vendedores[index]["despesa_fixa"], 2)
+            dados_vendedores[index]["despesa_variavel"] = round(dados_vendedores[index]["despesa_variavel"], 2)
+            dados_vendedores[index]["comissao"] = round(dados_vendedores[index]["comissao"], 3)
+            dados_vendedores[index]["lucro"] = round(dados_vendedores[index]["lucro"], 2)
+            dados_vendedores[index]["desconto"] = round(dados_vendedores[index]["desconto"], 2)
+
+            dados_vendedores[index]["lucro_percentual"] = round(
+                dados_vendedores[index]["lucro"] / dados_vendedores[index]["faturamento"], 3
+            ) if dados_vendedores[index]["lucro"] != 0 else 0.00
+
+        return dados_vendedores
 
     def venda_por_venda_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> List[RetornoVenda]:
 
         data_i, data_f = gerar_data(data_inicio, data_fim).values()
 
+        venda_item: List[RetornoVendaItem] = self.venda_item_periodo(data_i, data_f)
 
-        vi = VendaItem
-        p = Produto
-        rs = ResumeSubgroupo
-        v = vendaModel
-        f = Funcionario
+        codigos_vendas = set()
+        dados_vendas: List[RetornoVenda] = []
 
-        with SessionLocal() as db:
-            query = (
-                db.query(
-                    v.vend_cod.label("venda"),
-                    f.fun_cod.label("cod_vendedor"),
-                    f.fun_nome.label("vendedor_descricao"),
-                    func.sum((vi.desconto / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("desconto"),
-                    func.sum((vi.qtd - vi.qtd_devolvida) * vi.vrcusto_composicao).label("custo"),
-                    func.sum((vi.total / vi.qtd) * (vi.qtd - vi.qtd_devolvida)).label("faturamento"),
-                    func.sum((vi.qtd - vi.qtd_devolvida) * rs.fixed_unit_expense).label("despesa_fixa")
-                )
-                .join(p, vi.produto == p.prod_cod)
-                .join(rs, rs.cod_subgroup == p.prod_subgrupo)
-                .join(v, vi.venda == v.vend_cod)
-                .join(f, v.vendedor == f.fun_cod)
-                .filter(vi.dtvenda.between(data_i, data_f))
-                .group_by(v.vend_cod, f.fun_nome)
-            )
+        for venda in venda_item:
+            cod = venda["venda"]
+            if cod not in codigos_vendas:
+                codigos_vendas.add(cod)
+                dados_vendas.append({
+                    "venda": cod,
+                    "cod_vendedor": venda["cod_vendedor"],
+                    "vendedor_descricao": venda["nome_vendedor"],
+                    "desconto": 0.00,
+                    "custo": 0.00,
+                    "faturamento": 0.00,
+                    "despesa_fixa": 0.00,
+                    "despesa_variavel": 0.00,
+                    "comissao": 0.00,
+                    "lucro": 0.00,
+                    "lucro_percentual": 0.00,
+                    "data_venda": venda["data_venda"]
+                })
 
-            resultados = query.all()
+        for item in venda_item:
 
-            retorno: List[RetornoVenda] = []
+            for index, nota in enumerate(dados_vendas):
 
-            for row in resultados:
+                if item["venda"] == nota["venda"]:
+                    dados_vendas[index]["desconto"] += item["desconto"]
+                    dados_vendas[index]["custo"] += item["custo"]
+                    dados_vendas[index]["faturamento"] += item["total"]
+                    dados_vendas[index]["despesa_fixa"] += item["despesa_fixa"]
+                    dados_vendas[index]["despesa_variavel"] += item["despesa_variavel"]
+                    dados_vendas[index]["comissao"] += item["comissao"]
+                    dados_vendas[index]["lucro"] += item["lucro"]
+                    dados_vendas[index]["desconto"] += item["desconto"]
 
-                comissao = row.faturamento * float(self._total_values["comissao"])
-                despesa_variavel = row.faturamento * float(self._total_values["porcentagem_despesa_variavel"])
 
-                if (comissao + row.custo + despesa_variavel + row.despesa_fixa) > row.faturamento:
-                    comissao = 0.0
+        for index, ven in enumerate(dados_vendas):
 
-                lucro = row.faturamento - (comissao + row.custo + despesa_variavel + row.despesa_fixa)
-                lucro_p = round(lucro / row.faturamento, 3)
+            dados_vendas[index]["desconto"] = round(dados_vendas[index]["desconto"], 2)
+            dados_vendas[index]["custo"] = round(dados_vendas[index]["custo"], 2)
+            dados_vendas[index]["faturamento"] = round(dados_vendas[index]["faturamento"], 2)
+            dados_vendas[index]["despesa_fixa"] = round(dados_vendas[index]["despesa_fixa"], 2)
+            dados_vendas[index]["despesa_variavel"] = round(dados_vendas[index]["despesa_variavel"], 2)
+            dados_vendas[index]["comissao"] = round(dados_vendas[index]["comissao"], 3)
+            dados_vendas[index]["lucro"] = round(dados_vendas[index]["lucro"], 2)
+            dados_vendas[index]["desconto"] = round(dados_vendas[index]["desconto"], 2)
 
-                item: RetornoVenda = {
-                    "venda": row.venda,
-                    "cod_vendedor": row.cod_vendedor,
-                    "vendedor_descricao": row.vendedor_descricao,
-                    "desconto": float(row.desconto or 0),
-                    "custo": float(row.custo or 0),
-                    "faturamento": float(row.faturamento or 0),
-                    "despesa_fixa": row.despesa_fixa,
-                    "despesa_variavel": round(despesa_variavel, 3),
-                    "comissao": round(comissao, 3),
-                    "lucro": round(lucro, 3),
-                    "lucro_percentual": round(lucro_p, 3),
-                    "data_venda": (data_i, data_f)
-                }
-                retorno.append(item)
+            dados_vendas[index]["lucro_percentual"] = round(
+                dados_vendas[index]["lucro"] / dados_vendas[index]["faturamento"], 3
+            ) if dados_vendas[index]["lucro"] != 0 else 0.00
 
-            return retorno
+        return dados_vendas
+
 
     @staticmethod
     def faturamento_por_periodo(data_inicio: date | None = None, data_fim: date | None = None) -> RetornoFaturamento:
@@ -323,12 +329,10 @@ class Venda:
 
 if __name__ == "__main__":
     relatorio = Venda()
-    r = relatorio.venda_produto_id_anual_mes_por_mes(22677)
+    r = relatorio.venda_por_venda_periodo()
 
-    print(r)
-
-    # for v in r:
-    #     print(v)
+    for v in r:
+        print(v)
 
 
 

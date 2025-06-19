@@ -29,7 +29,12 @@ class ResumoFinanceiro:
         faturamento = fat.faturamento_por_periodo(data_inicio=primeiro_dia, data_fim=ultimo_dia)
         despesa = Despesas(data_inicio=primeiro_dia, data_fim=ultimo_dia)
 
-        lucro = round(faturamento["faturamento"] - (faturamento["custo"] + despesa.despesas_fixas + despesa.despesas_fixas), 2)
+        comissoes = sum([
+            comissao["comissao"]
+            for comissao in fat.venda_item_periodo(primeiro_dia, ultimo_dia)
+        ])
+
+        lucro = round(faturamento["faturamento"] - (faturamento["custo"] + despesa.despesas_fixas + despesa.despesas_fixas + comissoes), 2)
 
         return {
             "faturamento": round(faturamento["faturamento"], 2),
@@ -37,6 +42,7 @@ class ResumoFinanceiro:
             "desconto": round(faturamento["desconto"], 2),
             "despesa_fixa": round(despesa.despesas_fixas, 2),
             "despesa_variavel": round(despesa.despesas_variaveis, 2),
+            "comissao": round(comissoes, 2),
             "lucro_rs": round(lucro, 2),
             "lucro_percentual": round(lucro / faturamento["faturamento"], 2),
             "periodo": faturamento["data"]
