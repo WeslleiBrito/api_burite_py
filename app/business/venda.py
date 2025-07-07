@@ -1,9 +1,8 @@
 from typing import List
 from app.business.tools.gerar_data import gerar_data
 from app.business.valores_totais import TotalValues
-from app.models import Produto, ResumeSubgroupo, Funcionario
+from app.models import Produto
 from app.models.venda_item import VendaItem
-from app.models.venda import Venda as vendaModel
 from app.db.session import SessionLocal
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, func
