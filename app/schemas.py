@@ -1,6 +1,28 @@
 from pydantic import BaseModel
 from datetime import date
 
+class LogoBase64(BaseModel):
+    tipo: str
+    logo_base64: str
+
+class Endereco(BaseModel):
+    rua: str
+    numero: str
+    bairro: str
+    cidade: str
+    cep: str
+    estado: str
+    siglaEstado: str
+
+class RetornoEmpresa(BaseModel):
+    nome: str
+    logo: str
+    cnpj: LogoBase64
+    inscricaoEstadual: str
+    endereco: Endereco
+    telefone: str
+    email: str
+
 class VendaItemResumo(BaseModel):
     mes: str
     total_quantidade: float

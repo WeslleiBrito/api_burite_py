@@ -6,7 +6,7 @@ from app.models.nfce import Nfce
 from app.models.nfce_item import NfceItem
 from app.models.nfe import Nfe
 from app.models.nfe_item import NfeItem
-from app.schemas.faturamento_ultimos_doze_meses import AnnualTaxBillingResumo
+from app.schemas_.faturamento_ultimos_doze_meses import AnnualTaxBillingResumo
 from app.db.session import SessionLocal
 
 

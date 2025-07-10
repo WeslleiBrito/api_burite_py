@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Path, Query
-from app.schemas.venda_item import VendaItemResumo
+from app.schemas_.venda_item import VendaItemResumo
 from typing import List, Optional
 from app.services.venda_service import VendaService
 from datetime import date
