@@ -16,9 +16,9 @@ class Endereco(BaseModel):
 
 class RetornoEmpresa(BaseModel):
     nome: str
-    logo: str
-    cnpj: LogoBase64
+    cnpj: str
     inscricaoEstadual: str
+    logo: LogoBase64
     endereco: Endereco
     telefone: str
     email: str

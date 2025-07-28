@@ -8,7 +8,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, func
 from datetime import date
 import datetime
-from app.schemas_.venda_item import VendaItemResumo
+from app.schemas import VendaItemResumo
 from app.tipos.resumo_total import RetornoResumoTotal
 from app.tipos.retorno_total_values import RetornoTotalValues
 from app.tipos.retorno_venda import RetornoVenda
