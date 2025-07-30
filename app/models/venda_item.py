@@ -32,4 +32,11 @@ class VendaItem(Base):
     def fixed_unit_expense(self) -> float | None:
         if self.produto_rel and self.produto_rel.subgrupo_rel:
             return self.produto_rel.subgrupo_rel.fixed_unit_expense
-        return None  # ou return 0.0, se quiser evitar None
+        return None
+
+    def __repr__(self):
+        return (
+            f"<VendaItem(item_cod={self.item_cod}, venda={self.venda}, "
+            f"produto={self.produto}, qtd={self.qtd}, total={self.total}, "
+            f"desconto={self.desconto}, dtvenda={self.dtvenda})>"
+        )

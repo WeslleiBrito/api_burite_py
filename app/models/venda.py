@@ -7,7 +7,7 @@ class Venda(Base):
 
     vend_cod = Column(Integer, primary_key=True)  # Integer, como você confirmou
     vendedor = Column(Integer, ForeignKey("funcionario.fun_cod"))
-    dtvenda = Column(Date)
+    data = Column(Date)
 
     # Relacionamento correto com itens de venda
     itens = relationship("VendaItem", back_populates="venda_rel")
