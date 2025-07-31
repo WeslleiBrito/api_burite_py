@@ -20,7 +20,7 @@ sheet = client.open(SHEET_NAME).sheet1
 
 # Buscar dados direto do banco
 venda = Venda()
-vendas = venda.venda_por_venda_periodo(data_inicio=date.today(), data_fim=date.today())  # Ex: retorna lista de dicionários
+vendas = venda.venda_por_venda_periodo(data_fim=date.today())  # Ex: retorna lista de dicionários
 
 def serializar(val):
     if isinstance(val, (date, datetime)):

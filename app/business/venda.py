@@ -1,4 +1,6 @@
 from typing import List, Tuple
+
+from app.business.tools.calculo_faturamento_ultimos_12_meses import faturamento
 from app.business.tools.gerar_data import gerar_data
 from app.business.valores_totais import TotalValues
 from app.models import Produto, Funcionario
@@ -15,7 +17,7 @@ from app.tipos.retorno_venda_item import RetornoVendaItem
 from app.tipos.retorno_venda_vendedor import RetornoVendaVendedor
 from app.tipos.retorno_faturamento import RetornoFaturamento
 from app.models.venda import Venda as vendaDb
-
+from typing import Dict
 
 
 class Nodo:
@@ -174,17 +176,15 @@ class Venda:
 
 
         venda_item: List[RetornoVendaItem] = self.venda_item_periodo(data_i, data_f)
+        vendedor_dict: Dict[str, RetornoVendaVendedor] = {}
+        venda_inserida = set()
 
-        codigos_vendedores = set()
-        dados_vendedores: List[RetornoVendaVendedor] = []
-
-        for vendedor in venda_item:
-            cod = vendedor["cod_vendedor"]
-            if cod not in codigos_vendedores:
-                codigos_vendedores.add(cod)
-                dados_vendedores.append({
+        for item in venda_item:
+            cod = item["cod_vendedor"]
+            if cod not in vendedor_dict:
+                vendedor_dict[cod] = {
                     "cod_vendedor": cod,
-                    "vendedor_descricao": vendedor["nome_vendedor"],
+                    "vendedor_descricao": item["nome_vendedor"],
                     "desconto": 0.00,
                     "custo": 0.00,
                     "faturamento": 0.00,
@@ -198,44 +198,35 @@ class Venda:
                         venda_item[0]["data_venda"],
                         venda_item[-1]["data_venda"]
                     )
-                })
+                }
 
-        venda_inserida = set()
-
-        for item in venda_item:
-
-            for index, vendedor in enumerate(dados_vendedores):
-
-                if item["cod_vendedor"] == vendedor["cod_vendedor"]:
-                    dados_vendedores[index]["desconto"] += item["desconto"]
-                    dados_vendedores[index]["custo"] += item["custo"]
-                    dados_vendedores[index]["faturamento"] += item["total"]
-                    dados_vendedores[index]["despesa_fixa"] += item["despesa_fixa"]
-                    dados_vendedores[index]["despesa_variavel"] += item["despesa_variavel"]
-                    dados_vendedores[index]["comissao"] += item["comissao"]
-                    dados_vendedores[index]["lucro"] += item["lucro"]
-                    dados_vendedores[index]["quantidade_vendas"] += 1 if item["venda"] not in venda_inserida else 0
-                    dados_vendedores[index]["desconto"] += item["desconto"]
-                    venda_inserida.add(item["venda"])
+            vendedor = vendedor_dict[cod]
+            vendedor["custo"] += item["custo"]
+            vendedor["faturamento"] += item["total"]
+            vendedor["desconto"] += item["desconto"]
+            vendedor["despesa_fixa"] += item["despesa_fixa"]
+            vendedor["despesa_variavel"] += item["despesa_variavel"]
+            vendedor["comissao"] += item["comissao"]
+            vendedor["lucro"] += item["lucro"]
+            vendedor["quantidade_vendas"] += 1 if item["venda"] not in venda_inserida else 0
+            venda_inserida.add(item["venda"])
 
 
+        for key in vendedor_dict.keys():
+            vendedor_dict[key]["custo"] = round(vendedor_dict[key]["custo"], 2)
+            vendedor_dict[key]["faturamento"] = round(vendedor_dict[key]["faturamento"], 2)
+            vendedor_dict[key]["desconto"] = round(vendedor_dict[key]["desconto"], 2)
+            vendedor_dict[key]["despesa_fixa"] = round(vendedor_dict[key]["despesa_fixa"], 2)
+            vendedor_dict[key]["despesa_variavel"] = round(vendedor_dict[key]["despesa_variavel"], 2)
+            vendedor_dict[key]["comissao"] = round(vendedor_dict[key]["comissao"], 3)
+            vendedor_dict[key]["lucro"] = round(vendedor_dict[key]["lucro"], 2)
+            lucro = vendedor_dict[key]["lucro"]
+            faturamento = vendedor_dict[key]["faturamento"]
+            if lucro != 0:
+                vendedor_dict[key]["lucro_percentual"] = round(lucro / faturamento, 3)
 
-        for index, ven in enumerate(dados_vendedores):
 
-            dados_vendedores[index]["desconto"] = round(dados_vendedores[index]["desconto"], 2)
-            dados_vendedores[index]["custo"] = round(dados_vendedores[index]["custo"], 2)
-            dados_vendedores[index]["faturamento"] = round(dados_vendedores[index]["faturamento"], 2)
-            dados_vendedores[index]["despesa_fixa"] = round(dados_vendedores[index]["despesa_fixa"], 2)
-            dados_vendedores[index]["despesa_variavel"] = round(dados_vendedores[index]["despesa_variavel"], 2)
-            dados_vendedores[index]["comissao"] = round(dados_vendedores[index]["comissao"], 3)
-            dados_vendedores[index]["lucro"] = round(dados_vendedores[index]["lucro"], 2)
-            dados_vendedores[index]["desconto"] = round(dados_vendedores[index]["desconto"], 2)
-
-            dados_vendedores[index]["lucro_percentual"] = round(
-                dados_vendedores[index]["lucro"] / dados_vendedores[index]["faturamento"], 3
-            ) if dados_vendedores[index]["lucro"] != 0 else 0.00
-
-        return dados_vendedores
+        return list(vendedor_dict.values())
 
     def venda_por_venda_periodo(self, data_inicio: date | None = None, data_fim: date | None = None) -> List[RetornoVenda]:
 
@@ -251,9 +242,9 @@ class Venda:
                     "venda": cod,
                     "cod_vendedor": item["cod_vendedor"],
                     "vendedor_descricao": item["nome_vendedor"],
-                    "desconto": 0.0,
-                    "custo": 0.0,
                     "faturamento": 0.0,
+                    "custo": 0.0,
+                    "desconto": 0.0,
                     "despesa_fixa": 0.0,
                     "despesa_variavel": 0.0,
                     "comissao": 0.0,
@@ -347,7 +338,7 @@ class Venda:
 
 if __name__ == "__main__":
     relatorio = Venda()
-    r = relatorio.venda_por_venda_periodo(data_fim=date.today())
+    r = relatorio.venda_por_vendedor_periodo(data_fim=date.today())
 
     for item in r:
         print(item)
