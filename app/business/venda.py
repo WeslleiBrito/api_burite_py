@@ -18,58 +18,20 @@ from app.tipos.retorno_venda_vendedor import RetornoVendaVendedor
 from app.tipos.retorno_faturamento import RetornoFaturamento
 from app.models.venda import Venda as vendaDb
 from typing import Dict
-
+from contextlib import contextmanager
 
 class Nodo:
     def __init__(self, valor: RetornoVendaItem):
         self.valor: RetornoVendaItem = valor
         self.proximo: Nodo | None = None
 
-class ListaRetornoVendaItem:
-    def __init__(self):
-        self.head: Nodo | None = None
-        self.tamanho: int = 0
-
-    def add(self, valor: RetornoVendaItem):
-        novo = Nodo(valor)
-        if not self.head:
-            self.head = novo
-        else:
-            atual = self.head
-            while atual.proximo:
-                atual = atual.proximo
-
-            atual.proximo = novo
-        self.tamanho += 1
-
-    def __iter__(self):
-        atual = self.head
-        while atual:
-            yield atual.valor  # ou: yield atual, se quiser o Nodo inteiro
-            atual = atual.proximo
-
-    def __len__(self):
-        return self.tamanho
-
-    def __getitem__(self, indice: int):
-        if indice < 0 or indice >= self.tamanho:
-            raise IndexError("Índice fora do alcance")
-
-        atual = self.head
-        for _ in range(indice):
-            atual = atual.proximo
-
-        return atual.valor
-
-    def to_list(self) -> list:
-        resultado = [None] * self.tamanho
-        atual = self.head
-        i = 0
-        while atual:
-            resultado[i] = atual.valor
-            atual = atual.proximo
-            i += 1
-        return resultado
+@contextmanager
+def get_db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 # noinspection PyTypedDict,PyShadowingNames
@@ -79,42 +41,40 @@ class Venda:
         self._total_values: RetornoTotalValues = TotalValues().total_values()
 
     def venda_item_periodo(self, inicio: date, fim: date) -> list[RetornoVendaItem]:
-
         percentual_vr = float(self._total_values["porcentagem_despesa_variavel"])
         percentual_comissao = float(self._total_values["comissao"])
 
-        resultados: List[Tuple[VendaItem, vendaDb, Produto, Funcionario]] = (
-            self._db.query(VendaItem, vendaDb, Produto, Funcionario)
-            .join(vendaDb, VendaItem.venda == vendaDb.vend_cod)
-            .join(Produto, VendaItem.produto == Produto.prod_cod)
-            .outerjoin(vendaDb.vendedor_rel)  # ou .outerjoin(Funcionario, vendaDb.vendedor == Funcionario.fun_cod)
-            .filter(vendaDb.data.between(inicio, fim))
-            .all()
-        )
+        with get_db_session() as db:
+            resultados: List[Tuple[VendaItem, vendaDb, Produto, Funcionario]] = (
+                db.query(VendaItem, vendaDb, Produto, Funcionario)
+                .join(vendaDb, VendaItem.venda == vendaDb.vend_cod)
+                .join(Produto, VendaItem.produto == Produto.prod_cod)
+                .outerjoin(vendaDb.vendedor_rel)
+                .filter(vendaDb.data.between(inicio, fim))
+                .all()
+            )
 
-        total_itens = len(resultados)
-        lista_retorno = [None] * total_itens  # Pré-alocação eficiente
-        i = 0
+            total_itens = len(resultados)
+            lista_retorno = [None] * total_itens
 
-        for venda_item, venda, produto, funcionario in resultados:
+            for i, (venda_item, venda, produto, funcionario) in enumerate(resultados):
+                qtd = venda_item.qtd - venda_item.qtd_devolvida if venda_item.qtd_devolvida > 0 else venda_item.qtd
+                custo = venda_item.vrcusto_composicao * qtd
+                faturamento = (venda_item.total / venda_item.qtd) * qtd
+                despesa_fixa = venda_item.fixed_unit_expense * qtd
+                despesa_variavel = faturamento * percentual_vr
+                desconto = (venda_item.desconto / venda_item.qtd) * qtd if venda_item.desconto > 0 else 0
+                comissao = faturamento * percentual_comissao
+                total_custos = custo + despesa_fixa + despesa_variavel + comissao
 
-            qtd = venda_item.qtd - venda_item.qtd_devolvida if venda_item.qtd_devolvida > 0  else venda_item.qtd
-            custo = venda_item.vrcusto_composicao * qtd
-            faturamento = (venda_item.total / venda_item.qtd) * qtd
-            despesa_fixa = venda_item.fixed_unit_expense * qtd
-            despesa_variavel = faturamento * percentual_vr
-            desconto =  (venda_item.desconto / venda_item.qtd) * qtd if venda_item.desconto > 0 else 0
-            comissao = faturamento * percentual_comissao
-            total_custos = custo + despesa_fixa + despesa_variavel + comissao
+                if total_custos >= faturamento:
+                    total_custos -= comissao
+                    comissao = 0
 
-            if total_custos >= faturamento:
-                total_custos = total_custos - comissao
-                comissao = 0
+                lucro = faturamento - total_custos
+                lucro_p = lucro / faturamento if faturamento != 0 else 0
 
-            lucro = faturamento - total_custos
-            lucro_p = lucro / faturamento if faturamento != 0 else 0
-
-            lista_retorno[i] = RetornoVendaItem(
+                lista_retorno[i] = RetornoVendaItem(
                     item_cod=venda_item.item_cod,
                     venda=venda.vend_cod,
                     cod_produto=produto.prod_cod,
@@ -128,13 +88,11 @@ class Venda:
                     cod_vendedor=funcionario.fun_cod if funcionario.fun_cod else None,
                     nome_vendedor=funcionario.fun_nome if funcionario.fun_nome else "",
                     despesa_fixa=round(despesa_fixa, 3),
-                    despesa_variavel=round(despesa_variavel,2),
+                    despesa_variavel=round(despesa_variavel, 2),
                     comissao=round(comissao, 3),
                     lucro=round(lucro, 3),
                     lucro_percentual=round(lucro_p, 3),
                 )
-
-            i = i + 1
 
         return lista_retorno
 
@@ -338,10 +296,9 @@ class Venda:
 
 if __name__ == "__main__":
     relatorio = Venda()
-    r = relatorio.venda_por_vendedor_periodo(data_fim=date.today())
+    r = relatorio.venda_item_periodo(inicio=date(1970,1,1), fim=date.today())
 
-    for item in r:
-        print(item)
+    print(r)
 
 
 
